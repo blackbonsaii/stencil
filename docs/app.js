@@ -1,8 +1,8 @@
-import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS } from "./protocol.js";
-import { Printer } from "./printer.js";
-import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows } from "./imaging.js";
-const VERSION = "1.2";
-import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js";
+import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS } from "./protocol.js?v=1.3";
+import { Printer } from "./printer.js?v=1.3";
+import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows } from "./imaging.js?v=1.3";
+const VERSION = "1.3";
+import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.3";
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -145,6 +145,25 @@ function showPrinter() {
   updatePrintButton();
 }
 printer.addEventListener("connection", showPrinter);
+
+// Diagnostics log, so a failure on the phone can be copied and shared.
+const logLines = [];
+printer.addEventListener("log", e => {
+  const time = new Date().toLocaleTimeString([], { hour12: false });
+  logLines.push(`${time}  ${e.detail}`);
+  if (logLines.length > 300) logLines.shift();
+  $("log").textContent = logLines.join("\n");
+});
+$("copy-log").addEventListener("click", async () => {
+  const text = `Stencil v${VERSION} · ${navigator.userAgent}\n${logLines.join("\n")}`;
+  try { await navigator.clipboard.writeText(text); $("copy-log").textContent = "Copied"; }
+  catch {
+    const r = document.createRange(); r.selectNodeContents($("log"));
+    getSelection().removeAllRanges(); getSelection().addRange(r);
+    $("copy-log").textContent = "Selected, tap Copy";
+  }
+  setTimeout(() => { $("copy-log").textContent = "Copy log"; }, 2500);
+});
 printer.addEventListener("status", showPrinter);
 
 function updatePrintButton() {
@@ -207,5 +226,5 @@ function say(text, bad = false) {
 $("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker.register("sw.js?v=1.3").catch(() => {});
 }

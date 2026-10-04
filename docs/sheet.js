@@ -1,5 +1,5 @@
 // Interactive preview of a US Letter sheet, in printer dots. Pinch to resize, drag to move.
-import { DPI, WIDTH_DOTS } from "./protocol.js";
+import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.3";
 
 export const SHEET_W = Math.round(8.5 * DPI);            // 1726
 export const SHEET_H = Math.round(11 * DPI);             // 2233

@@ -153,3 +153,11 @@ dialog h2 { margin: 0 0 4px; font-size: 19px; }
 dialog p { margin: 0 0 14px; color: var(--muted); }
 dialog form { display: flex; flex-direction: column; gap: 10px; }
 .version { text-align: center; font-size: 11px; }
+.diag summary { font-size: 13px; color: var(--muted); cursor: pointer; }
+.diag pre {
+  font: 11px/1.45 ui-monospace, Menlo, monospace;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px; max-height: 220px; overflow: auto; white-space: pre-wrap;
+  -webkit-user-select: text; user-select: text;
+}
+.diag .btn { width: 100%; font-size: 13px; padding: 8px; }

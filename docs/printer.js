@@ -1,11 +1,17 @@
 // Web Bluetooth connection to the TP88 (works in Bluefy on iOS, Chrome on Mac/Android).
-import { QUERY, parseStatus } from "./protocol.js";
+import { QUERY, parseStatus } from "./protocol.js?v=1.3";
 
 // Full 128-bit UUIDs: some iOS Bluetooth browsers reject the short numeric form.
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
 const WRITE   = "0000ff02-0000-1000-8000-00805f9b34fb";
 const NOTIFY  = "0000ff03-0000-1000-8000-00805f9b34fb";
 const CREDIT_TIMEOUT_MS = 10000;
+// iPhones typically negotiate a ~185-byte MTU, so a write-without-response over ~182 bytes is
+// silently dropped or cut short, whatever the printer advertises. Stay under it.
+const MAX_SAFE_PAYLOAD = 180;
+
+const describe = err =>
+  [err?.name, err?.message, err?.code].filter(v => v != null && v !== "").join(": ") || String(err);
 
 async function retry(fn, tries) {
   for (let i = 1; ; i++) {
@@ -32,11 +38,15 @@ async function openChannels(svc, at) {
   return found;
 }
 
+const hex = b => Array.from(b, x => x.toString(16).padStart(2, "0")).join(" ");
+
 export class Printer extends EventTarget {
   device = null;
   #write = null;
   #credits = 0;
   #maxPayload = 20;            // until the printer tells us (02 LL HH)
+  #creditsGranted = 0;
+  #writes = 0;
   #creditWaiters = [];
   #busy = false;
   status = {};
@@ -48,7 +58,7 @@ export class Printer extends EventTarget {
   async connect(onStep = () => {}) {
     if (!navigator.bluetooth) throw new Error("This browser can't use Bluetooth. On iPhone/iPad, open the app in Bluefy.");
     let step = "";
-    const at = s => { step = s; onStep(s); };
+    const at = s => { step = s; onStep(s); if (s) this.log(s); };
     try {
       if (!this.device) {
         at("Choosing printer…");
@@ -65,11 +75,12 @@ export class Printer extends EventTarget {
           const server = await retry(() => this.device.gatt.connect(), 3);
           at("Finding print service…");
           const svc = await server.getPrimaryService(SERVICE);
-          at("Opening channels…");
+          at("Opening channels… (tap Pair if iPhone asks)");
           ({ notify, write: this.#write } = await openChannels(svc, at));
           break;
         } catch (err) {
           // iOS sometimes hands back stale handles after a retried connect: start clean once.
+          this.log(`attempt ${attempt} failed: ${describe(err)}`);
           if (attempt >= 2) throw err;
           this.device.gatt.disconnect();
           await new Promise(r => setTimeout(r, 800));
@@ -85,11 +96,12 @@ export class Printer extends EventTarget {
       this.#emit("connection");
       at("Reading status…");
       await this.refreshStatus();
+      this.log(`connected; max payload ${this.#maxPayload}, credits ${this.#credits}`);
       at("");
     } catch (err) {
       if (err?.name === "NotFoundError" && step === "Choosing printer…") throw err;   // user cancelled the picker
-      const detail = [err?.name, err?.message, err?.code].filter(v => v != null && v !== "").join(": ") || String(err);
-      const e = new Error(`${step.replace("…", "")} failed (${detail})`);
+      const e = new Error(`${step.replace(/….*$/, "")} failed (${describe(err)})`);
+      this.log(e.message);
       e.name = "ConnectError";
       throw e;
     }
@@ -104,11 +116,13 @@ export class Printer extends EventTarget {
   /** Send bytes, chunked to the printer's payload size and paced by its credits. */
   async send(data, onProgress) {
     for (let i = 0; i < data.length; i += this.#maxPayload) {
-      if (!this.connected) throw new Error("Printer disconnected");
-      await this.#takeCredit();
+      if (!this.connected) throw new Error(`Printer disconnected (${i} of ${data.length} bytes sent)`);
+      try { await this.#takeCredit(); }
+      catch (e) { e.message += ` (${i} of ${data.length} bytes sent)`; throw e; }
       const chunk = data.subarray(i, i + this.#maxPayload);
       if (this.#write.writeValueWithoutResponse) await this.#write.writeValueWithoutResponse(chunk);
       else await this.#write.writeValue(chunk);
+      this.#writes++;
       onProgress?.(Math.min(1, (i + chunk.length) / data.length));
     }
   }
@@ -118,7 +132,19 @@ export class Printer extends EventTarget {
     this.#busy = true;
     try {
       const done = new Promise(res => this.addEventListener("jobdone", res, { once: true }));
-      await this.send(job, onProgress);
+      const t0 = performance.now(), w0 = this.#writes, c0 = this.#creditsGranted;
+      this.log(`print: ${job.length} bytes in ${Math.ceil(job.length / this.#maxPayload)} writes of ≤${this.#maxPayload}`);
+      let next = 0.25;
+      try {
+        await this.send(job, f => {
+          onProgress?.(f);
+          if (f >= next) { this.log(`  ${Math.round(f * 100)}% after ${((performance.now() - t0) / 1000).toFixed(1)}s`); next += 0.25; }
+        });
+      } catch (e) {
+        this.log(`print failed: ${e.message}; writes ${this.#writes - w0}, credits back ${this.#creditsGranted - c0}, credits now ${this.#credits}`);
+        throw e;
+      }
+      this.log(`sent in ${((performance.now() - t0) / 1000).toFixed(1)}s; waiting for printer to finish`);
       // Wait for the printer's "finished" message, but don't hang if it never comes.
       await Promise.race([done, new Promise(res => setTimeout(res, 20000))]);
     } finally {
@@ -143,15 +169,21 @@ export class Printer extends EventTarget {
     let i = 0;
     while (i < b.length) {
       const t = b[i];
-      if (t === 0x01) { this.#addCredits(b[i + 1]); i += 2; }
-      else if (t === 0x02) { this.#maxPayload = b[i + 1] | (b[i + 2] << 8); i += 3; }
+      if (t === 0x01) { this.#creditsGranted += b[i + 1]; this.#addCredits(b[i + 1]); i += 2; }
+      else if (t === 0x02) {
+        const advertised = b[i + 1] | (b[i + 2] << 8);
+        this.#maxPayload = Math.min(advertised, MAX_SAFE_PAYLOAD);
+        this.log(`printer accepts ${advertised}-byte writes; using ${this.#maxPayload}`);
+        i += 3;
+      }
       else if (t === 0x1a) {
         const len = { 0x04: 3, 0x05: 3, 0x06: 3, 0x07: 5, 0x0f: 3 }[b[i + 1]] ?? (b.length - i);
         const s = parseStatus(b.subarray(i, i + len));
-        if (s?.jobDone) this.#emit("jobdone");
+        if (s?.jobDone) { this.log(`printer: job finished (${b[i + 2]})`); this.#emit("jobdone"); }
         else if (s && !s.unknown) { Object.assign(this.status, s); this.#emit("status"); }
+        else this.log(`printer said: ${hex(b.subarray(i, i + len))}`);
         i += len;
-      } else break;
+      } else { this.log(`unrecognised: ${hex(b.subarray(i))}`); break; }
     }
   }
 
@@ -166,6 +198,7 @@ export class Printer extends EventTarget {
   }
 
   #onDisconnect() {
+    this.log("disconnected");
     this.#write = null;
     for (const w of this.#creditWaiters) { clearTimeout(w.timer); w.reject(new Error("Printer disconnected")); }
     this.#creditWaiters = [];
@@ -173,4 +206,6 @@ export class Printer extends EventTarget {
   }
 
   #emit(type) { this.dispatchEvent(new Event(type)); }
+
+  log(text) { this.dispatchEvent(new CustomEvent("log", { detail: text })); }
 }
