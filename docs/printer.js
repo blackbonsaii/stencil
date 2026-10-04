@@ -1,10 +1,18 @@
 // Web Bluetooth connection to the TP88 (works in Bluefy on iOS, Chrome on Mac/Android).
 import { QUERY, parseStatus } from "./protocol.js";
 
-const SERVICE = 0xff00;
-const WRITE = 0xff02;
-const NOTIFY = 0xff03;
+// Full 128-bit UUIDs: some iOS Bluetooth browsers reject the short numeric form.
+const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
+const WRITE   = "0000ff02-0000-1000-8000-00805f9b34fb";
+const NOTIFY  = "0000ff03-0000-1000-8000-00805f9b34fb";
 const CREDIT_TIMEOUT_MS = 10000;
+
+async function retry(fn, tries) {
+  for (let i = 1; ; i++) {
+    try { return await fn(); }
+    catch (e) { if (i >= tries) throw e; await new Promise(r => setTimeout(r, 400 * i)); }
+  }
+}
 
 export class Printer extends EventTarget {
   device = null;
@@ -19,24 +27,44 @@ export class Printer extends EventTarget {
   get busy() { return this.#busy; }
 
   /** Must be called from a user tap (browser rule for Bluetooth). */
-  async connect() {
+  async connect(onStep = () => {}) {
     if (!navigator.bluetooth) throw new Error("This browser can't use Bluetooth. On iPhone/iPad, open the app in Bluefy.");
-    if (!this.device) {
-      this.device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: "TP88" }, { services: [SERVICE] }],
-        optionalServices: [SERVICE],
+    let step = "";
+    const at = s => { step = s; onStep(s); };
+    try {
+      if (!this.device) {
+        at("Choosing printer…");
+        this.device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: "TP88" }, { namePrefix: "TP88" }],
+          optionalServices: [SERVICE],
+        });
+        this.device.addEventListener("gattserverdisconnected", () => this.#onDisconnect());
+      }
+      at("Connecting…");
+      const server = await retry(() => this.device.gatt.connect(), 3);
+      at("Finding print service…");
+      const svc = await server.getPrimaryService(SERVICE);
+      at("Opening channels…");
+      const notify = await svc.getCharacteristic(NOTIFY);
+      this.#write = await svc.getCharacteristic(WRITE);
+      this.#credits = 0;
+      notify.addEventListener("characteristicvaluechanged", e => {
+        const v = e.target.value;
+        this.#onNotify(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
       });
-      this.device.addEventListener("gattserverdisconnected", () => this.#onDisconnect());
+      at("Starting notifications…");
+      await notify.startNotifications();
+      this.#emit("connection");
+      at("Reading status…");
+      await this.refreshStatus();
+      at("");
+    } catch (err) {
+      if (err?.name === "NotFoundError" && step === "Choosing printer…") throw err;   // user cancelled the picker
+      const detail = [err?.name, err?.message].filter(Boolean).join(": ") || String(err);
+      const e = new Error(`${step.replace("…", "")} failed (${detail})`);
+      e.name = "ConnectError";
+      throw e;
     }
-    const server = await this.device.gatt.connect();
-    const svc = await server.getPrimaryService(SERVICE);
-    const notify = await svc.getCharacteristic(NOTIFY);
-    this.#write = await svc.getCharacteristic(WRITE);
-    this.#credits = 0;
-    notify.addEventListener("characteristicvaluechanged", e => this.#onNotify(new Uint8Array(e.target.value.buffer)));
-    await notify.startNotifications();
-    this.#emit("connection");
-    await this.refreshStatus();
   }
 
   disconnect() { this.device?.gatt?.disconnect(); }

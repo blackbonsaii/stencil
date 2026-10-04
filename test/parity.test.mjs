@@ -2,8 +2,8 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildJob, parseStatus, WIDTH_BYTES } from "../app/protocol.js";
-import { packRows, toGray, inkBounds } from "../app/raster.js";
+import { buildJob, parseStatus, WIDTH_BYTES } from "../docs/protocol.js";
+import { packRows, toGray, inkBounds } from "../docs/raster.js";
 
 const dir = new URL(".", import.meta.url);
 const gray = new Uint8Array(readFileSync(new URL("fixture.gray", dir)));

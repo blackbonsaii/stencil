@@ -152,3 +152,4 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
 dialog h2 { margin: 0 0 4px; font-size: 19px; }
 dialog p { margin: 0 0 14px; color: var(--muted); }
 dialog form { display: flex; flex-direction: column; gap: 10px; }
+.version { text-align: center; font-size: 11px; }

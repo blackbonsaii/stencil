@@ -1,6 +1,7 @@
 import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS } from "./protocol.js";
 import { Printer } from "./printer.js";
 import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows } from "./imaging.js";
+const VERSION = "1.1";
 import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js";
 
 const $ = id => document.getElementById(id);
@@ -121,10 +122,10 @@ saveSheet();
 $("connect").addEventListener("click", async () => {
   if (printer.connected) return printer.refreshStatus().catch(() => {});
   try {
-    $("connect-label").textContent = "Connecting…";
-    await printer.connect();
+    say("");
+    await printer.connect(step => { if (step) $("connect-label").textContent = step; });
   } catch (err) {
-    if (err.name !== "NotFoundError") say(err.message || "Couldn't connect.", true);   // NotFound = user cancelled
+    if (err.name !== "NotFoundError") say(err.message || String(err), true);   // NotFound = user cancelled
     showPrinter();
   }
 });
@@ -155,7 +156,7 @@ $("print").addEventListener("click", async () => {
   const p = sheet.placement;
   if (!design || !p || !sheet.fits) return;
   try {
-    if (!printer.connected) await printer.connect();
+    if (!printer.connected) await printer.connect(step => { if (step) $("connect-label").textContent = step; });
     refreshPreview();
     const { rows, height } = packRows(gray, p.w, p.h, {
       x: p.x - PRINT_X0,
@@ -176,7 +177,7 @@ $("print").addEventListener("click", async () => {
     say("");
     afterPrint(ghost, endCursor);
   } catch (err) {
-    if (err.name !== "NotFoundError") say(err.message || "Printing failed.", true);
+    if (err.name !== "NotFoundError") say(err.message || String(err), true);
   } finally {
     $("progress").hidden = true;
     updatePrintButton();
@@ -202,6 +203,8 @@ function say(text, bad = false) {
   $("message").textContent = text;
   $("message").classList.toggle("bad", bad);
 }
+
+$("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});

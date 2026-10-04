@@ -1,5 +1,6 @@
-// Offline support: serve the app from the cache, refresh the cache in the background.
-const VERSION = "stencil-v1";
+// Offline support: always try the network first so updates show up straight away;
+// fall back to the cached copy when offline or the network is slow.
+const VERSION = "stencil-v1.1";
 const FILES = ["./", "index.html", "styles.css", "app.js", "protocol.js", "raster.js", "imaging.js",
                "printer.js", "sheet.js", "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-512.png"];
 
@@ -16,9 +17,17 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET" || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(caches.open(VERSION).then(async cache => {
-    const cached = await cache.match(e.request, { ignoreSearch: true });
-    const fresh = fetch(e.request).then(r => { if (r.ok) cache.put(e.request, r.clone()); return r; });
-    if (cached) { e.waitUntil(fresh.catch(() => {})); return cached; }
-    return fresh;
+    try {
+      const r = await Promise.race([
+        fetch(e.request, { cache: "no-cache" }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("slow")), 4000)),
+      ]);
+      if (r.ok) cache.put(e.request, r.clone());
+      return r;
+    } catch {
+      const cached = await cache.match(e.request, { ignoreSearch: true });
+      if (cached) return cached;
+      throw new Error("offline and not cached");
+    }
   }));
 });
