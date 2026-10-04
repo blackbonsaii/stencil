@@ -1,5 +1,5 @@
 // Web Bluetooth connection to the TP88 (works in Bluefy on iOS, Chrome on Mac/Android).
-import { QUERY, parseStatus } from "./protocol.js?v=1.3";
+import { QUERY, parseStatus } from "./protocol.js?v=1.4";
 
 // Full 128-bit UUIDs: some iOS Bluetooth browsers reject the short numeric form.
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
@@ -119,7 +119,9 @@ export class Printer extends EventTarget {
       if (!this.connected) throw new Error(`Printer disconnected (${i} of ${data.length} bytes sent)`);
       try { await this.#takeCredit(); }
       catch (e) { e.message += ` (${i} of ${data.length} bytes sent)`; throw e; }
-      const chunk = data.subarray(i, i + this.#maxPayload);
+      // slice() copies into a buffer of exactly this chunk. Bluefy sends a view's whole underlying
+      // buffer, so passing a subarray re-sent the start of the job on every write.
+      const chunk = data.slice(i, i + this.#maxPayload);
       if (this.#write.writeValueWithoutResponse) await this.#write.writeValueWithoutResponse(chunk);
       else await this.#write.writeValue(chunk);
       this.#writes++;
@@ -180,7 +182,10 @@ export class Printer extends EventTarget {
         const len = { 0x04: 3, 0x05: 3, 0x06: 3, 0x07: 5, 0x0f: 3 }[b[i + 1]] ?? (b.length - i);
         const s = parseStatus(b.subarray(i, i + len));
         if (s?.jobDone) { this.log(`printer: job finished (${b[i + 2]})`); this.#emit("jobdone"); }
-        else if (s && !s.unknown) { Object.assign(this.status, s); this.#emit("status"); }
+        else if (s && !s.unknown) {
+          if (s.coverRaw != null && s.coverRaw !== 0x98) this.log(`cover status byte ${hex([s.coverRaw])} (not the usual closed value 98)`);
+          Object.assign(this.status, s); this.#emit("status");
+        }
         else this.log(`printer said: ${hex(b.subarray(i, i + len))}`);
         i += len;
       } else { this.log(`unrecognised: ${hex(b.subarray(i))}`); break; }

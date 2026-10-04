@@ -1,8 +1,8 @@
-import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS } from "./protocol.js?v=1.3";
-import { Printer } from "./printer.js?v=1.3";
-import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows } from "./imaging.js?v=1.3";
-const VERSION = "1.3";
-import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.3";
+import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS } from "./protocol.js?v=1.4";
+import { Printer } from "./printer.js?v=1.4";
+import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows } from "./imaging.js?v=1.4";
+const VERSION = "1.4";
+import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.4";
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -138,7 +138,7 @@ function showPrinter() {
   else {
     const bits = ["TP88"];
     if (s.battery != null) bits.push(`${s.battery}%`);
-    if (s.coverClosed === false) bits.push("cover open");
+    if (s.coverClosed === false) bits.push("check cover");
     else if (s.paper === false) bits.push("no paper?");
     $("connect-label").textContent = bits.join(" · ");
   }
@@ -226,5 +226,5 @@ function say(text, bad = false) {
 $("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js?v=1.3").catch(() => {});
+  navigator.serviceWorker.register("sw.js?v=1.4").catch(() => {});
 }

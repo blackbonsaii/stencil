@@ -42,6 +42,8 @@ def to_bitmap(img, width_bytes, threshold=128, dither=False, invert=False):
         img = img.resize((dots, round(img.height * dots / img.width)), Image.LANCZOS)
     if invert:
         img = ImageOps.invert(img)
+    # The TP88 lays dots right-to-left as seen from the printed side: flip so output reads correctly.
+    img = ImageOps.mirror(img)
     bw = img.convert("1") if dither else img.point(lambda p: 255 if p >= threshold else 0, "1")
     # PIL "1" mode: 0 = black. Printer: bit 1 = black. Invert bits.
     raw = bytes(~b & 0xFF for b in bw.tobytes())

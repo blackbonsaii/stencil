@@ -36,14 +36,21 @@ test("blank design produces nothing", () => {
 
 test("x offset, mirror and clipping", () => {
   const g = new Uint8Array(8).fill(255); g[0] = 0;             // 8x1, leftmost dot black
-  let r = packRows(g, 8, 1, { x: 9 }).rows;                    // dot at 9
+  let r = packRows(g, 8, 1, { x: 9, flipSheet: false }).rows;                    // dot at 9
   assert.equal(r[1], 0x40);
-  r = packRows(g, 8, 1, { x: 9, mirror: true }).rows;          // dot at 16
+  r = packRows(g, 8, 1, { x: 9, mirror: true, flipSheet: false }).rows;          // dot at 16
   assert.equal(r[2], 0x80);
-  r = packRows(g, 8, 1, { x: 1660 }).rows;                     // overhang right: dot 1660 kept
+  r = packRows(g, 8, 1, { x: 1660, flipSheet: false }).rows;                     // overhang right: dot 1660 kept
   assert.equal(r[207], 0x08);
-  r = packRows(g, 8, 1, { x: -3, mirror: true }).rows;         // overhang left, mirrored dot at 4
+  r = packRows(g, 8, 1, { x: -3, mirror: true, flipSheet: false }).rows;         // overhang left, mirrored dot at 4
   assert.equal(r[0], 0x08);
+});
+
+test("sheet flip puts the leftmost on-screen dot at the far end of the row", () => {
+  const g = new Uint8Array(8).fill(255); g[0] = 0;
+  const r = packRows(g, 8, 1, { x: 0 }).rows;
+  assert.equal(r[207], 0x01);
+  assert.equal(r.subarray(0, 207).every(b => b === 0), true);
 });
 
 test("transparency becomes white; ink bounds", () => {

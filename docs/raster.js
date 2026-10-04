@@ -1,5 +1,5 @@
 // Image → printer dots. Pure functions over plain arrays so they can be tested in Node.
-import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=1.3";
+import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=1.4";
 
 /**
  * RGBA pixels → grayscale (0 black … 255 white), transparency treated as white paper.
@@ -46,9 +46,11 @@ export function inkBounds(gray, w, h, threshold) {
  * @param {number} o.lead     blank rows to send before the design (positions it down the sheet)
  * @param {number} o.threshold  gray below this prints black
  * @param {boolean} o.mirror  flip the design horizontally
+ * @param {boolean} o.flipSheet  the TP88 lays dots right-to-left as seen from the printed side,
+ *                               so the whole row is reversed to match the on-screen preview
  * @returns {{rows: Uint8Array, height: number}}
  */
-export function packRows(gray, w, h, { x = 0, lead = 0, threshold = 128, mirror = false }) {
+export function packRows(gray, w, h, { x = 0, lead = 0, threshold = 128, mirror = false, flipSheet = true }) {
   // Drop trailing blank rows so short designs don't feed extra paper.
   let last = h - 1;
   outer: for (; last >= 0; last--) {
@@ -63,7 +65,7 @@ export function packRows(gray, w, h, { x = 0, lead = 0, threshold = 128, mirror 
     for (let sx = from; sx < to; sx++) {
       const v = gray[src + (mirror ? w - 1 - sx : sx)];
       if (v < threshold) {
-        const dx = x + sx;
+        const dx = flipSheet ? WIDTH_DOTS - 1 - (x + sx) : x + sx;
         rows[dst + (dx >> 3)] |= 0x80 >> (dx & 7);
       }
     }
