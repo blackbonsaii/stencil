@@ -1,7 +1,7 @@
 import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS } from "./protocol.js";
 import { Printer } from "./printer.js";
 import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows } from "./imaging.js";
-const VERSION = "1.1";
+const VERSION = "1.2";
 import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js";
 
 const $ = id => document.getElementById(id);

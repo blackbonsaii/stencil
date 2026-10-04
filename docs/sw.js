@@ -1,6 +1,6 @@
 // Offline support: always try the network first so updates show up straight away;
 // fall back to the cached copy when offline or the network is slow.
-const VERSION = "stencil-v1.1";
+const VERSION = "stencil-v1.2";
 const FILES = ["./", "index.html", "styles.css", "app.js", "protocol.js", "raster.js", "imaging.js",
                "printer.js", "sheet.js", "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-512.png"];
 

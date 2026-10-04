@@ -14,6 +14,24 @@ async function retry(fn, tries) {
   }
 }
 
+/** Find both characteristics, preferring one listing call over two lookups. */
+async function openChannels(svc, at) {
+  const want = { notify: NOTIFY, write: WRITE };
+  const found = {};
+  try {
+    for (const c of await svc.getCharacteristics()) {
+      for (const [k, uuid] of Object.entries(want)) if (String(c.uuid).toLowerCase() === uuid) found[k] = c;
+    }
+  } catch { /* fall back to direct lookups */ }
+  for (const [k, uuid] of Object.entries(want)) {
+    if (!found[k]) {
+      at(k === "notify" ? "Opening reply channel…" : "Opening send channel…");
+      found[k] = await svc.getCharacteristic(uuid);
+    }
+  }
+  return found;
+}
+
 export class Printer extends EventTarget {
   device = null;
   #write = null;
@@ -40,13 +58,23 @@ export class Printer extends EventTarget {
         });
         this.device.addEventListener("gattserverdisconnected", () => this.#onDisconnect());
       }
-      at("Connecting…");
-      const server = await retry(() => this.device.gatt.connect(), 3);
-      at("Finding print service…");
-      const svc = await server.getPrimaryService(SERVICE);
-      at("Opening channels…");
-      const notify = await svc.getCharacteristic(NOTIFY);
-      this.#write = await svc.getCharacteristic(WRITE);
+      let notify;
+      for (let attempt = 1; ; attempt++) {
+        try {
+          at("Connecting…");
+          const server = await retry(() => this.device.gatt.connect(), 3);
+          at("Finding print service…");
+          const svc = await server.getPrimaryService(SERVICE);
+          at("Opening channels…");
+          ({ notify, write: this.#write } = await openChannels(svc, at));
+          break;
+        } catch (err) {
+          // iOS sometimes hands back stale handles after a retried connect: start clean once.
+          if (attempt >= 2) throw err;
+          this.device.gatt.disconnect();
+          await new Promise(r => setTimeout(r, 800));
+        }
+      }
       this.#credits = 0;
       notify.addEventListener("characteristicvaluechanged", e => {
         const v = e.target.value;
@@ -60,7 +88,7 @@ export class Printer extends EventTarget {
       at("");
     } catch (err) {
       if (err?.name === "NotFoundError" && step === "Choosing printer…") throw err;   // user cancelled the picker
-      const detail = [err?.name, err?.message].filter(Boolean).join(": ") || String(err);
+      const detail = [err?.name, err?.message, err?.code].filter(v => v != null && v !== "").join(": ") || String(err);
       const e = new Error(`${step.replace("…", "")} failed (${detail})`);
       e.name = "ConnectError";
       throw e;
