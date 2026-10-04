@@ -60,7 +60,8 @@ Reinserting the sheet resets the position to the top. Any position tracking has 
 ## Findings from phone testing (Bluefy on iOS)
 
 - **Row direction:** seen from the printed side, the head lays each row out right-to-left (MSB of byte 0 lands at the right edge). Senders must reverse rows; `packRows(flipSheet)` and `tp88.py` both do.
-- **Top margin:** a freshly inserted sheet feeds about 1 in (≈1.06 in measured from a photo) before the first printed row. The app's calibration page measures it exactly.
+- **Top margin:** the first printed row lands 0.25 in below the top edge of a freshly inserted Letter sheet (measured with the calibration page; an earlier 1 in estimate from a photo was wrong).
+- **Bottom limit:** printing stops about 9.5–9.75 in after the first row, roughly 1.25 in short of the end of the sheet. Probably the paper sensor sitting ahead of the head.
 - **iOS write size:** keep BLE writes ≤ 180 bytes. iPhones negotiate a smaller MTU than the 244 bytes the printer advertises.
 - **Bluefy bug:** `writeValueWithoutResponse(view)` sends the view's whole underlying `ArrayBuffer`, not just the view. Always pass a copy (`data.slice()`), never a `subarray()`.
 - **Pairing:** iOS asks to pair on first access and may drop the link once. The app reconnects automatically.

@@ -1,8 +1,8 @@
-import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.5";
-import { Printer } from "./printer.js?v=1.5";
-import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray } from "./imaging.js?v=1.5";
-const VERSION = "1.5";
-import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.5";
+import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.6";
+import { Printer } from "./printer.js?v=1.6";
+import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray, sizeCheckDesign } from "./imaging.js?v=1.6";
+const VERSION = "1.6";
+import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.6";
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -10,7 +10,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 
-const settings = Object.assign({ threshold: 160, density: 4, mirror: false, topMarginIn: 1.0, printLengthIn: null },
+const settings = Object.assign({ threshold: 160, density: 4, mirror: false, topMarginIn: 0.25 },
                                store.get("settings", {}));
 const printer = new Printer();
 const sheet = new SheetView($("sheet"));
@@ -21,8 +21,7 @@ sheet.ghosts = saved.ghosts;
 
 function applyCalibration() {
   sheet.topMargin = Math.round(settings.topMarginIn * DPI);
-  sheet.bottom = settings.printLengthIn > 0
-    ? Math.min(SHEET_H, sheet.topMargin + Math.round(settings.printLengthIn * DPI)) : SHEET_H;
+  sheet.bottom = SHEET_H;
 }
 const freshCursor = () => sheet.topMargin;
 
@@ -48,19 +47,28 @@ function saveSettings() { store.set("settings", settings); showSettings(); }
 
 // ---- design -----------------------------------------------------------------
 
+function useDesign(d, widthIn) {
+  design = d;
+  gray = null; grayKey = "";
+  sheet.bitmap = null;
+  sheet.place(design.height / design.width, widthIn);
+  $("file-label").textContent = "Change design";
+  $("empty-hint").hidden = true;
+  $("size-group").hidden = false;
+}
+
+$("size-check").addEventListener("click", () => {
+  useDesign(sizeCheckDesign(DPI), 4);
+  say("4 × 4 in size check placed. Print it, then measure the square's height and width.");
+});
+
 $("file").addEventListener("change", async e => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
   say("Loading…");
   try {
-    design = await loadDesign(file);
-    gray = null; grayKey = "";
-    sheet.bitmap = null;
-    sheet.place(design.height / design.width);
-    $("file-label").textContent = "Change design";
-    $("empty-hint").hidden = true;
-    $("size-group").hidden = false;
+    useDesign(await loadDesign(file));
     say("");
   } catch (err) {
     say(err.message || "Couldn't open that image.", true);
@@ -230,12 +238,10 @@ function afterPrint(ghost, endCursor) {
 // ---- calibration ------------------------------------------------------------------
 
 $("cal-top").value = settings.topMarginIn.toFixed(2);
-$("cal-length").value = settings.printLengthIn ?? "";
-for (const id of ["cal-top", "cal-length"]) {
+for (const id of ["cal-top"]) {
   $(id).addEventListener("change", () => {
-    const top = parseFloat($("cal-top").value), len = parseFloat($("cal-length").value);
+    const top = parseFloat($("cal-top").value);
     if (top >= 0 && top < 4) settings.topMarginIn = top;
-    settings.printLengthIn = len > 0 && len <= 11 ? len : null;
     store.set("settings", settings);
     applyCalibration();
     sheet.cursor = Math.max(sheet.cursor, freshCursor());
@@ -270,5 +276,5 @@ function say(text, bad = false) {
 $("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js?v=1.5").catch(() => {});
+  navigator.serviceWorker.register("sw.js?v=1.6").catch(() => {});
 }

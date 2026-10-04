@@ -1,5 +1,5 @@
 // Browser side of the image pipeline: decode, crop to the ink, scale to printer dots.
-import { toGray, inkBounds, packRows } from "./raster.js?v=1.5";
+import { toGray, inkBounds, packRows } from "./raster.js?v=1.6";
 
 const MAX_SOURCE_PX = 4096;     // cap huge camera-roll images to keep phones responsive
 const CROP_THRESHOLD = 245;     // anything darker than near-white counts as part of the design
@@ -107,6 +107,28 @@ export function calibrationGray(w, h, dpi) {
   ctx.font = `bold ${Math.round(dpi * 0.13)}px sans-serif`;
   ctx.fillText("CALIBRATION · measure: top edge of sheet → 0 line, and the last number printed", dpi * 0.9, Math.round(dpi * 0.32));
   return toGray(ctx.getImageData(0, 0, w, h).data);
+}
+
+/** A 4 × 4 in square with a tick every inch, for checking that prints come out true to size. */
+export function sizeCheckDesign(dpi) {
+  const s = 4 * dpi, c = canvas(s, s), ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = "#000";
+  const t = 4;                                            // outline thickness in dots
+  ctx.fillRect(0, 0, s, t); ctx.fillRect(0, s - t, s, t);
+  ctx.fillRect(0, 0, t, s); ctx.fillRect(s - t, 0, t, s);
+  for (let i = 1; i < 4; i++) {
+    const p = Math.round(i * dpi) - 1;
+    ctx.fillRect(p, 0, 3, dpi * 0.25); ctx.fillRect(p, s - dpi * 0.25, 3, dpi * 0.25);
+    ctx.fillRect(0, p, dpi * 0.25, 3); ctx.fillRect(s - dpi * 0.25, p, dpi * 0.25, 3);
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = `bold ${Math.round(dpi * 0.3)}px sans-serif`;
+  ctx.fillText("4 in × 4 in", s / 2, s / 2 - dpi * 0.25);
+  ctx.font = `${Math.round(dpi * 0.16)}px sans-serif`;
+  ctx.fillText("measure outside edge to outside edge", s / 2, s / 2 + dpi * 0.2);
+  ctx.fillText("↑ top", s / 2, dpi * 0.45);
+  return { source: c, width: s, height: s, name: "size check" };
 }
 
 export { packRows };

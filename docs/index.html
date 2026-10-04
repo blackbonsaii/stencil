@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="styles.css?v=1.5">
+<link rel="stylesheet" href="styles.css?v=1.6">
 </head>
 <body>
 <header class="bar">
@@ -74,9 +74,8 @@
       <label class="field">Top edge of sheet to the “0” line
         <span class="unit"><input id="cal-top" type="number" inputmode="decimal" step="0.05" min="0" max="4"><i>in</i></span>
       </label>
-      <label class="field">Last line number that printed (leave blank if it reached the bottom)
-        <span class="unit"><input id="cal-length" type="number" inputmode="decimal" step="0.25" min="1" max="11"><i>in</i></span>
-      </label>
+      <p class="note">Size check: places a 4 × 4 in square you can print anywhere and measure.</p>
+      <button id="size-check" class="btn" type="button">Load 4-inch size check</button>
     </details>
     <details class="diag">
       <summary>Diagnostics</summary>
@@ -97,6 +96,6 @@
   </form>
 </dialog>
 
-<script type="module" src="app.js?v=1.5"></script>
+<script type="module" src="app.js?v=1.6"></script>
 </body>
 </html>

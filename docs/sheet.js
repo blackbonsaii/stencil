@@ -1,8 +1,11 @@
 // Interactive preview of a US Letter sheet, in printer dots. Pinch to resize, drag to move.
-import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.5";
+import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.6";
 
-export const SHEET_W = Math.round(8.5 * DPI);            // 1726
-export const SHEET_H = Math.round(11 * DPI);             // 2233
+// Printable tissue of the user's stencil sheets: 214 × 259 mm (the rest of the 8.5 × 11 in
+// sheet is the glued strip at the top).
+const mm = v => Math.round(v / 25.4 * DPI);
+export const SHEET_W = mm(214);                           // 1710
+export const SHEET_H = mm(259);                           // 2070
 export const PRINT_X0 = Math.round((SHEET_W - WIDTH_DOTS) / 2);   // print head is centred
 const MIN_SIZE = Math.round(0.25 * DPI);
 const SNAP = 12;                                          // dots
@@ -12,8 +15,8 @@ export class SheetView extends EventTarget {
   aspect = 1;           // h / w of the design
   bitmap = null;        // canvas of dots that will print
   cursor = 0;           // where the next print's first row lands, in sheet dots
-  topMargin = DPI;      // a fresh sheet feeds this far before the head can reach it (calibrated)
-  bottom = SHEET_H;     // lowest row the printer reaches on the sheet (calibrated)
+  topMargin = Math.round(0.25 * DPI);  // a fresh sheet feeds this far before the head can reach it (calibrated)
+  bottom = SHEET_H;     // the printer prints right to the end of the sheet
   ghosts = [];          // [{x, y, w, h, thumb}]
   snapped = false;
   #pointers = new Map();
@@ -182,13 +185,13 @@ export class SheetView extends EventTarget {
     ctx.strokeStyle = "rgba(60,80,120,.12)";
     ctx.lineWidth = px;
     ctx.beginPath();
-    for (let i = 1; i < 11; i++) { ctx.moveTo(0, i * DPI); ctx.lineTo(SHEET_W, i * DPI); }
-    for (let i = 1; i < 9; i++) { ctx.moveTo(i * DPI, 0); ctx.lineTo(i * DPI, SHEET_H); }
+    for (let i = 1; i * DPI < SHEET_H; i++) { ctx.moveTo(0, i * DPI); ctx.lineTo(SHEET_W, i * DPI); }
+    for (let i = 1; i * DPI < SHEET_W; i++) { ctx.moveTo(i * DPI, 0); ctx.lineTo(i * DPI, SHEET_H); }
     ctx.stroke();
     ctx.fillStyle = "rgba(60,80,120,.55)";
     ctx.font = `${11 * px}px -apple-system, system-ui, sans-serif`;
     ctx.textBaseline = "top";
-    for (let i = 1; i < 11; i++) ctx.fillText(`${i}″`, 3 * px, i * DPI + 2 * px);
+    for (let i = 1; (i + 0.1) * DPI < SHEET_H; i++) ctx.fillText(`${i}″`, 3 * px, i * DPI + 2 * px);
 
     // strips the print head can't reach
     ctx.fillStyle = "rgba(120,120,120,.18)";
