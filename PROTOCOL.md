@@ -61,7 +61,9 @@ Reinserting the sheet resets the position to the top. Any position tracking has 
 
 - **Row direction:** seen from the printed side, the head lays each row out right-to-left (MSB of byte 0 lands at the right edge). Senders must reverse rows; `packRows(flipSheet)` and `tp88.py` both do.
 - **Top margin:** the first printed row lands 0.25 in below the top edge of a freshly inserted Letter sheet (measured with the calibration page; an earlier 1 in estimate from a photo was wrong).
-- **Bottom limit:** printing stops about 9.5–9.75 in after the first row, roughly 1.25 in short of the end of the sheet. Probably the paper sensor sitting ahead of the head.
+- **Bottom:** the printer prints right to the end of the sheet. The user's stencil sheets are 8.5 × 11 in overall, but the printable tissue is 214 × 259 mm; the rest is the glued strip at the top.
+- **Scale:** verified true to size. A 4 × 4 in test square measured exactly 4 in in both directions.
+- **Edge marks:** blocky marks along both side edges appear on every sheet, including with Phomemo's own app. They don't come from the print data, and their cause is unknown.
 - **iOS write size:** keep BLE writes ≤ 180 bytes. iPhones negotiate a smaller MTU than the 244 bytes the printer advertises.
 - **Bluefy bug:** `writeValueWithoutResponse(view)` sends the view's whole underlying `ArrayBuffer`, not just the view. Always pass a copy (`data.slice()`), never a `subarray()`.
 - **Pairing:** iOS asks to pair on first access and may drop the link once. The app reconnects automatically.
