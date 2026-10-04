@@ -1,8 +1,8 @@
-import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS } from "./protocol.js?v=1.4";
-import { Printer } from "./printer.js?v=1.4";
-import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows } from "./imaging.js?v=1.4";
-const VERSION = "1.4";
-import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.4";
+import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.5";
+import { Printer } from "./printer.js?v=1.5";
+import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray } from "./imaging.js?v=1.5";
+const VERSION = "1.5";
+import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.5";
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -10,12 +10,21 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 
-const settings = Object.assign({ threshold: 160, density: 4, mirror: false }, store.get("settings", {}));
+const settings = Object.assign({ threshold: 160, density: 4, mirror: false, topMarginIn: 1.0, printLengthIn: null },
+                               store.get("settings", {}));
 const printer = new Printer();
 const sheet = new SheetView($("sheet"));
+applyCalibration();
 const saved = store.get("sheet", { cursor: 0, ghosts: [] });
-sheet.cursor = saved.cursor;
+sheet.cursor = Math.max(sheet.topMargin, saved.cursor);
 sheet.ghosts = saved.ghosts;
+
+function applyCalibration() {
+  sheet.topMargin = Math.round(settings.topMarginIn * DPI);
+  sheet.bottom = settings.printLengthIn > 0
+    ? Math.min(SHEET_H, sheet.topMargin + Math.round(settings.printLengthIn * DPI)) : SHEET_H;
+}
+const freshCursor = () => sheet.topMargin;
 
 let design = null;      // {source, width, height, name}
 let gray = null;        // design at current print size
@@ -84,7 +93,7 @@ function showSize() {
     note.textContent = `${cm(p.w)} × ${cm(p.h)} cm · pinch the sheet to resize, drag to move`;
     note.classList.remove("bad");
   } else {
-    note.textContent = `Doesn't fit in the space left on this sheet (${fmtIn(SHEET_H - sheet.cursor)} tall). Make it smaller or start a new sheet.`;
+    note.textContent = `Doesn't fit in the space left on this sheet (${fmtIn(sheet.bottom - sheet.cursor)} tall). Make it smaller or start a new sheet.`;
     note.classList.add("bad");
   }
 }
@@ -106,15 +115,15 @@ function saveSheet() {
   const n = sheet.ghosts.length;
   $("sheet-note").textContent = n === 0 ? "Fresh sheet"
     : `${n} print${n > 1 ? "s" : ""} on this sheet` +
-      (sheet.cursor > 0 ? ` · ${fmtIn(SHEET_H - sheet.cursor)} left below the last one` : " · sheet back at the top");
+      (sheet.cursor > sheet.topMargin ? ` · ${fmtIn(sheet.bottom - sheet.cursor)} left below the last one` : " · sheet back at the top");
   if (sheet.placement) sheet.place(sheet.aspect, sheet.placement.w / DPI);
   else sheet.draw();
   showSize();
   updatePrintButton();
 }
 
-$("new-sheet").addEventListener("click", () => { sheet.ghosts = []; sheet.cursor = 0; saveSheet(); });
-$("reinserted").addEventListener("click", () => { sheet.cursor = 0; saveSheet(); });
+$("new-sheet").addEventListener("click", () => { sheet.ghosts = []; sheet.cursor = freshCursor(); saveSheet(); });
+$("reinserted").addEventListener("click", () => { sheet.cursor = freshCursor(); saveSheet(); });
 saveSheet();
 
 // ---- printer --------------------------------------------------------------------
@@ -207,16 +216,51 @@ function afterPrint(ghost, endCursor) {
   const dlg = $("after-print");
   dlg.addEventListener("close", () => {
     const where = dlg.returnValue;
-    if (where === "done") { sheet.ghosts = []; sheet.cursor = 0; }
+    if (where === "done") { sheet.ghosts = []; sheet.cursor = freshCursor(); }
     else {
       sheet.ghosts.push(ghost);
-      sheet.cursor = where === "top" ? 0 : Math.min(SHEET_H, endCursor);
+      sheet.cursor = where === "top" ? freshCursor() : Math.min(sheet.bottom, endCursor);
     }
     saveSheet();
   }, { once: true });
   dlg.returnValue = "in";
   dlg.showModal();
 }
+
+// ---- calibration ------------------------------------------------------------------
+
+$("cal-top").value = settings.topMarginIn.toFixed(2);
+$("cal-length").value = settings.printLengthIn ?? "";
+for (const id of ["cal-top", "cal-length"]) {
+  $(id).addEventListener("change", () => {
+    const top = parseFloat($("cal-top").value), len = parseFloat($("cal-length").value);
+    if (top >= 0 && top < 4) settings.topMarginIn = top;
+    settings.printLengthIn = len > 0 && len <= 11 ? len : null;
+    store.set("settings", settings);
+    applyCalibration();
+    sheet.cursor = Math.max(sheet.cursor, freshCursor());
+    saveSheet();
+    say("Calibration saved.");
+  });
+}
+
+$("cal-print").addEventListener("click", async () => {
+  try {
+    if (!printer.connected) await printer.connect(step => { if (step) $("connect-label").textContent = step; });
+    const rows = SHEET_H;   // a full sheet's worth, so it shows where printing stops
+    const { rows: data, height } = packRows(calibrationGray(WIDTH_DOTS, rows, DPI), WIDTH_DOTS, rows,
+                                            { threshold: 128 });
+    $("progress").hidden = false;
+    say("Printing calibration page…");
+    await printer.print(buildJob(data, height, settings.density), f => { $("progress").value = f; });
+    say("Now measure from the top edge of the sheet to the 0 line, and note the last line number that printed.");
+    sheet.ghosts = []; sheet.cursor = freshCursor(); saveSheet();
+  } catch (err) {
+    if (err.name !== "NotFoundError") say(err.message || String(err), true);
+  } finally {
+    $("progress").hidden = true;
+  }
+});
 
 function say(text, bad = false) {
   $("message").textContent = text;
@@ -226,5 +270,5 @@ function say(text, bad = false) {
 $("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js?v=1.4").catch(() => {});
+  navigator.serviceWorker.register("sw.js?v=1.5").catch(() => {});
 }

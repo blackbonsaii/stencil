@@ -161,3 +161,4 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
   -webkit-user-select: text; user-select: text;
 }
 .diag .btn { width: 100%; font-size: 13px; padding: 8px; }
+.diag[open] { display: flex; flex-direction: column; gap: 8px; }

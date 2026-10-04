@@ -1,5 +1,5 @@
 // Web Bluetooth connection to the TP88 (works in Bluefy on iOS, Chrome on Mac/Android).
-import { QUERY, parseStatus } from "./protocol.js?v=1.4";
+import { QUERY, parseStatus } from "./protocol.js?v=1.5";
 
 // Full 128-bit UUIDs: some iOS Bluetooth browsers reject the short numeric form.
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
@@ -46,6 +46,9 @@ export class Printer extends EventTarget {
   #credits = 0;
   #maxPayload = 20;            // until the printer tells us (02 LL HH)
   #creditsGranted = 0;
+  #manualDisconnect = false;
+  #reconnecting = false;
+  #connecting = false;
   #writes = 0;
   #creditWaiters = [];
   #busy = false;
@@ -58,6 +61,7 @@ export class Printer extends EventTarget {
   async connect(onStep = () => {}) {
     if (!navigator.bluetooth) throw new Error("This browser can't use Bluetooth. On iPhone/iPad, open the app in Bluefy.");
     let step = "";
+    this.#manualDisconnect = false;
     const at = s => { step = s; onStep(s); if (s) this.log(s); };
     try {
       if (!this.device) {
@@ -82,7 +86,7 @@ export class Printer extends EventTarget {
           // iOS sometimes hands back stale handles after a retried connect: start clean once.
           this.log(`attempt ${attempt} failed: ${describe(err)}`);
           if (attempt >= 2) throw err;
-          this.device.gatt.disconnect();
+          this.device.gatt.disconnect();     // our own reset: #connecting blocks auto-reconnect
           await new Promise(r => setTimeout(r, 800));
         }
       }
@@ -104,10 +108,12 @@ export class Printer extends EventTarget {
       this.log(e.message);
       e.name = "ConnectError";
       throw e;
+    } finally {
+      this.#connecting = false;
     }
   }
 
-  disconnect() { this.device?.gatt?.disconnect(); }
+  disconnect() { this.#manualDisconnect = true; this.device?.gatt?.disconnect(); }
 
   async refreshStatus() {
     for (const q of [QUERY.battery, QUERY.paper, QUERY.cover]) await this.send(new Uint8Array(q));
@@ -208,6 +214,23 @@ export class Printer extends EventTarget {
     for (const w of this.#creditWaiters) { clearTimeout(w.timer); w.reject(new Error("Printer disconnected")); }
     this.#creditWaiters = [];
     this.#emit("connection");
+    if (!this.#manualDisconnect && !this.#reconnecting && !this.#connecting) this.#autoReconnect();
+  }
+
+  /** iOS often drops the link once right after pairing; quietly reconnect (no picker needed). */
+  async #autoReconnect() {
+    this.#reconnecting = true;
+    try {
+      for (let i = 1; i <= 2 && !this.connected && !this.#manualDisconnect; i++) {
+        await new Promise(r => setTimeout(r, 1000 * i));
+        this.log(`reconnecting (try ${i})`);
+        try { await this.connect(); return; }
+        catch (e) { this.log(`reconnect failed: ${e.message}`); }
+      }
+    } finally {
+      this.#reconnecting = false;
+      this.#emit("connection");
+    }
   }
 
   #emit(type) { this.dispatchEvent(new Event(type)); }

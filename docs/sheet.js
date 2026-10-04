@@ -1,5 +1,5 @@
 // Interactive preview of a US Letter sheet, in printer dots. Pinch to resize, drag to move.
-import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.4";
+import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.5";
 
 export const SHEET_W = Math.round(8.5 * DPI);            // 1726
 export const SHEET_H = Math.round(11 * DPI);             // 2233
@@ -11,7 +11,9 @@ export class SheetView extends EventTarget {
   placement = null;     // {x, y, w, h} in sheet dots
   aspect = 1;           // h / w of the design
   bitmap = null;        // canvas of dots that will print
-  cursor = 0;           // rows already fed past (sheet left in printer)
+  cursor = 0;           // where the next print's first row lands, in sheet dots
+  topMargin = DPI;      // a fresh sheet feeds this far before the head can reach it (calibrated)
+  bottom = SHEET_H;     // lowest row the printer reaches on the sheet (calibrated)
   ghosts = [];          // [{x, y, w, h, thumb}]
   snapped = false;
   #pointers = new Map();
@@ -32,13 +34,13 @@ export class SheetView extends EventTarget {
 
   get fits() {
     const p = this.placement;
-    return !!p && p.y >= this.cursor && p.y + p.h <= SHEET_H;
+    return !!p && p.y >= this.cursor && p.y + p.h <= this.bottom;
   }
 
   /** Put a new design on the sheet: centred, in the free area, at a sensible size. */
   place(aspect, widthIn = 3) {
     this.aspect = aspect;
-    const free = SHEET_H - this.cursor;
+    const free = this.bottom - this.cursor;
     let w = Math.min(WIDTH_DOTS, Math.round(widthIn * DPI));
     if (w * aspect > free) w = Math.max(MIN_SIZE, Math.floor(free / aspect));
     this.placement = { x: 0, y: this.cursor, w, h: Math.round(w * aspect) };
@@ -66,7 +68,7 @@ export class SheetView extends EventTarget {
   #clamp() {
     const p = this.placement;
     p.x = Math.max(PRINT_X0, Math.min(PRINT_X0 + WIDTH_DOTS - p.w, p.x));
-    p.y = Math.max(this.cursor, Math.min(Math.max(this.cursor, SHEET_H - p.h), p.y));
+    p.y = Math.max(this.cursor, Math.min(Math.max(this.cursor, this.bottom - p.h), p.y));
     const centred = PRINT_X0 + Math.round((WIDTH_DOTS - p.w) / 2);
     this.snapped = Math.abs(p.x - centred) <= SNAP;
     if (this.snapped) p.x = centred;
@@ -209,17 +211,18 @@ export class SheetView extends EventTarget {
       ctx.fillText(`#${i + 1}  ${fmtIn(g.w)} × ${fmtIn(g.h)}`, g.x, g.y - 2 * px);
     });
 
-    // paper already fed past the head
-    if (this.cursor > 0) {
-      ctx.fillStyle = "rgba(90,90,90,.30)";
-      ctx.fillRect(0, 0, SHEET_W, this.cursor);
-      ctx.strokeStyle = "rgba(200,60,40,.9)";
-      ctx.lineWidth = 1.5 * px;
-      ctx.beginPath(); ctx.moveTo(0, this.cursor); ctx.lineTo(SHEET_W, this.cursor); ctx.stroke();
-      ctx.fillStyle = "rgba(170,40,30,1)";
-      ctx.textBaseline = "bottom";
-      ctx.fillText("Next print starts here (sheet still in printer)", 30 * px, this.cursor - 3 * px);
-    }
+    // areas the head can't reach: top of a fresh sheet, below the calibrated end, or already fed past
+    ctx.fillStyle = "rgba(90,90,90,.30)";
+    ctx.fillRect(0, 0, SHEET_W, this.cursor);
+    if (this.bottom < SHEET_H) ctx.fillRect(0, this.bottom, SHEET_W, SHEET_H - this.bottom);
+    ctx.strokeStyle = "rgba(200,60,40,.9)";
+    ctx.lineWidth = 1.5 * px;
+    ctx.beginPath(); ctx.moveTo(0, this.cursor); ctx.lineTo(SHEET_W, this.cursor); ctx.stroke();
+    ctx.fillStyle = "rgba(170,40,30,1)";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(this.cursor > this.topMargin ? "Next print starts here (sheet still in printer)"
+                                              : "Printer can't reach above this line",
+                 30 * px, this.cursor - 3 * px);
 
     // the design
     const p = this.placement;

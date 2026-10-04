@@ -1,5 +1,5 @@
 // Image → printer dots. Pure functions over plain arrays so they can be tested in Node.
-import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=1.4";
+import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=1.5";
 
 /**
  * RGBA pixels → grayscale (0 black … 255 white), transparency treated as white paper.

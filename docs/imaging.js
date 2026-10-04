@@ -1,5 +1,5 @@
 // Browser side of the image pipeline: decode, crop to the ink, scale to printer dots.
-import { toGray, inkBounds, packRows } from "./raster.js?v=1.4";
+import { toGray, inkBounds, packRows } from "./raster.js?v=1.5";
 
 const MAX_SOURCE_PX = 4096;     // cap huge camera-roll images to keep phones responsive
 const CROP_THRESHOLD = 245;     // anything darker than near-white counts as part of the design
@@ -82,6 +82,31 @@ export function ghostThumb(bitmap, maxPx = 300) {
   const c = canvas(Math.max(1, Math.round(bitmap.width * s)), Math.max(1, Math.round(bitmap.height * s)));
   c.getContext("2d").drawImage(bitmap, 0, 0, c.width, c.height);
   return c.toDataURL("image/png");
+}
+
+/**
+ * Calibration page: a line every ¼ inch, numbered every ½ inch by distance from the first printed
+ * row, plus centre and edge marks. Measuring it tells us where printing starts and stops on a sheet.
+ */
+export function calibrationGray(w, h, dpi) {
+  const c = canvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "#000";
+  ctx.textBaseline = "top";
+  for (let q = 0; q * dpi / 4 < h; q++) {
+    const y = Math.round(q * dpi / 4), major = q % 2 === 0;
+    ctx.fillRect(0, y, w, major ? 3 : 1);
+    if (major) {
+      ctx.font = `bold ${Math.round(dpi * 0.16)}px sans-serif`;
+      const label = (q / 4).toFixed(1).replace(/\.0$/, "");
+      for (const x of [Math.round(dpi * 0.3), w / 2 - dpi * 0.15, w - dpi * 0.7]) ctx.fillText(label, x, y + 6);
+    }
+  }
+  ctx.fillRect(Math.round(w / 2) - 1, 0, 3, h);          // centre line
+  ctx.fillRect(0, 0, 4, h); ctx.fillRect(w - 4, 0, 4, h); // edges of the print head
+  ctx.font = `bold ${Math.round(dpi * 0.13)}px sans-serif`;
+  ctx.fillText("CALIBRATION · measure: top edge of sheet → 0 line, and the last number printed", dpi * 0.9, Math.round(dpi * 0.32));
+  return toGray(ctx.getImageData(0, 0, w, h).data);
 }
 
 export { packRows };

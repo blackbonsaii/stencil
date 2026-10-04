@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="styles.css?v=1.4">
+<link rel="stylesheet" href="styles.css?v=1.5">
 </head>
 <body>
 <header class="bar">
@@ -68,6 +68,17 @@
       <button id="print" class="btn primary big" type="button" disabled>Print</button>
     </div>
     <details class="diag">
+      <summary>Printer calibration</summary>
+      <p class="note">Load a fresh or scrap sheet at the top, print this page, then measure it.</p>
+      <button id="cal-print" class="btn" type="button">Print calibration page</button>
+      <label class="field">Top edge of sheet to the “0” line
+        <span class="unit"><input id="cal-top" type="number" inputmode="decimal" step="0.05" min="0" max="4"><i>in</i></span>
+      </label>
+      <label class="field">Last line number that printed (leave blank if it reached the bottom)
+        <span class="unit"><input id="cal-length" type="number" inputmode="decimal" step="0.25" min="1" max="11"><i>in</i></span>
+      </label>
+    </details>
+    <details class="diag">
       <summary>Diagnostics</summary>
       <pre id="log">Nothing yet. Connect or print and the details appear here.</pre>
       <button id="copy-log" class="btn" type="button">Copy log</button>
@@ -86,6 +97,6 @@
   </form>
 </dialog>
 
-<script type="module" src="app.js?v=1.4"></script>
+<script type="module" src="app.js?v=1.5"></script>
 </body>
 </html>
