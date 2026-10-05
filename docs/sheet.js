@@ -1,5 +1,5 @@
 // Interactive preview of a US Letter sheet, in printer dots. Pinch to resize, drag to move.
-import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.9";
+import { DPI, WIDTH_DOTS } from "./protocol.js?v=2.0";
 
 // Printable tissue of the user's stencil sheets: 214 × 259 mm (the rest of the 8.5 × 11 in
 // sheet is the glued strip at the top).
@@ -65,7 +65,7 @@ export class SheetView extends EventTarget {
     if (w * aspect > free) w = Math.max(MIN_SIZE, Math.floor(free / aspect));
     this.placement = { x: 0, y: this.cursor, w, h: Math.round(w * aspect) };
     this.placement.x = PRINT_X0 + Math.round((WIDTH_DOTS - w) / 2);
-    this.#clamp();
+    this.#clamp(true);
     this.#changed(true);
   }
 
@@ -78,17 +78,22 @@ export class SheetView extends EventTarget {
   }
 
   #resize(w, cx, cy) {
-    const p = this.placement;
+    const p = this.placement, wasInside = !this.cropped;
     w = Math.max(MIN_SIZE, Math.min(WIDTH_DOTS, Math.round(w)));
     p.w = w; p.h = Math.round(w * this.aspect);
     p.x = Math.round(cx - p.w / 2); p.y = Math.round(cy - p.h / 2);
-    this.#clamp();
+    // Resizing a design that was fully inside keeps it inside; only dragging hangs it off an edge.
+    this.#clamp(wasInside);
   }
 
-  #clamp() {
+  #clamp(inside = false) {
+    const p = this.placement, a = this.printArea;
+    if (inside) {
+      if (p.w <= a.w) p.x = Math.max(a.x, Math.min(a.x + a.w - p.w, p.x));
+      if (p.h <= a.h) p.y = Math.max(a.y, Math.min(a.y + a.h - p.h, p.y));
+    }
     // The design may hang off the print area (only the part inside prints) but always keeps at
     // least MIN_SIZE inside it, so it can't be lost off the edge.
-    const p = this.placement, a = this.printArea;
     const keep = (pos, size, a0, aSize) =>
       Math.max(a0 + Math.min(MIN_SIZE, aSize) - size, Math.min(a0 + aSize - Math.min(MIN_SIZE, aSize), pos));
     p.x = keep(p.x, p.w, a.x, a.w);

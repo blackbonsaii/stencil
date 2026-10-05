@@ -1,8 +1,8 @@
-import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.9";
-import { Printer } from "./printer.js?v=1.9";
-import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray, sizeCheckDesign } from "./imaging.js?v=1.9";
-const VERSION = "1.9";
-import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.9";
+import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=2.0";
+import { Printer } from "./printer.js?v=2.0";
+import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray, sizeCheckDesign } from "./imaging.js?v=2.0";
+const VERSION = "2.0";
+import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=2.0";
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -318,5 +318,5 @@ function say(text, bad = false) {
 $("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js?v=1.9").catch(() => {});
+  navigator.serviceWorker.register("sw.js?v=2.0").catch(() => {});
 }
