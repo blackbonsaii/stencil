@@ -1,8 +1,8 @@
-import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.8";
-import { Printer } from "./printer.js?v=1.8";
-import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray, sizeCheckDesign } from "./imaging.js?v=1.8";
-const VERSION = "1.8";
-import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.8";
+import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.9";
+import { Printer } from "./printer.js?v=1.9";
+import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray, sizeCheckDesign } from "./imaging.js?v=1.9";
+const VERSION = "1.9";
+import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.9";
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -97,11 +97,15 @@ function showSize() {
   if (document.activeElement !== $("h-in")) $("h-in").value = (p.h / DPI).toFixed(2);
   const cm = d => (d / DPI * 2.54).toFixed(1);
   const note = $("size-note");
-  if (sheet.fits) {
+  if (sheet.fits && sheet.cropped) {
+    const v = sheet.visible;
+    note.textContent = `Only the bright part prints: ${fmtIn(v.w)} × ${fmtIn(v.h)}. The faded part is outside the printable area.`;
+    note.classList.remove("bad");
+  } else if (sheet.fits) {
     note.textContent = `${cm(p.w)} × ${cm(p.h)} cm · pinch the sheet to resize, drag to move`;
     note.classList.remove("bad");
   } else {
-    note.textContent = `Doesn't fit in the space left on this sheet (${fmtIn(sheet.bottom - sheet.cursor)} tall). Make it smaller or start a new sheet.`;
+    note.textContent = `No room left on this sheet (${fmtIn(sheet.bottom - sheet.cursor)} below the last print). Put it back in at the top or use a new sheet.`;
     note.classList.add("bad");
   }
 }
@@ -197,12 +201,15 @@ $("print").addEventListener("click", async () => {
     const { rows, height } = packRows(gray, p.w, p.h, {
       x: p.x - PRINT_X0,
       lead: p.y - sheet.cursor,
+      maxRows: sheet.bottom - sheet.cursor,
       threshold: settings.threshold,
       mirror: settings.mirror,
     });
-    if (!height) return say("Nothing to print. Try a bolder line thickness.", true);
+    if (!height) return say(sheet.cropped ? "Nothing to print in the bright part. Move the design so its lines are inside the printable area."
+                                          : "Nothing to print. Try a bolder line thickness.", true);
     const job = buildJob(rows, height, settings.density);
-    const ghost = { x: p.x, y: p.y, w: p.w, h: p.h, thumb: ghostThumb(sheet.bitmap) };
+    const v = sheet.visible;   // only this part prints when the design hangs off the print area
+    const ghost = { ...v, thumb: ghostThumb(sheet.bitmap, { x: v.x - p.x, y: v.y - p.y, w: v.w, h: v.h }) };
     const endCursor = sheet.cursor + height + FEED_LINES + INTER_JOB_GAP_DOTS;
 
     $("progress").hidden = false;
@@ -311,5 +318,5 @@ function say(text, bad = false) {
 $("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js?v=1.8").catch(() => {});
+  navigator.serviceWorker.register("sw.js?v=1.9").catch(() => {});
 }

@@ -1,5 +1,5 @@
 // Interactive preview of a US Letter sheet, in printer dots. Pinch to resize, drag to move.
-import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.8";
+import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.9";
 
 // Printable tissue of the user's stencil sheets: 214 × 259 mm (the rest of the 8.5 × 11 in
 // sheet is the glued strip at the top).
@@ -35,10 +35,27 @@ export class SheetView extends EventTarget {
     canvas.addEventListener("wheel", e => this.#wheel(e), { passive: false });
   }
 
-  get fits() {
-    const p = this.placement;
-    return !!p && p.y >= this.cursor && p.y + p.h <= this.bottom;
+  /** The part of the sheet the head can still print on: its width, from the cursor down. */
+  get printArea() {
+    return { x: PRINT_X0, y: this.cursor, w: WIDTH_DOTS, h: Math.max(0, this.bottom - this.cursor) };
   }
+
+  /** The part of the design that will print (the rest hangs outside the print area), or null. */
+  get visible() {
+    const p = this.placement, a = this.printArea;
+    if (!p) return null;
+    const x = Math.max(p.x, a.x), y = Math.max(p.y, a.y);
+    const w = Math.min(p.x + p.w, a.x + a.w) - x, h = Math.min(p.y + p.h, a.y + a.h) - y;
+    return w > 0 && h > 0 ? { x, y, w, h } : null;
+  }
+
+  /** True when only part of the design will print. */
+  get cropped() {
+    const p = this.placement, v = this.visible;
+    return !!p && !!v && (v.w < p.w || v.h < p.h);
+  }
+
+  get fits() { return this.printArea.h >= MIN_SIZE && !!this.visible; }
 
   /** Put a new design on the sheet: centred, in the free area, at a sensible size. */
   place(aspect, widthIn = 3) {
@@ -69,9 +86,13 @@ export class SheetView extends EventTarget {
   }
 
   #clamp() {
-    const p = this.placement;
-    p.x = Math.max(PRINT_X0, Math.min(PRINT_X0 + WIDTH_DOTS - p.w, p.x));
-    p.y = Math.max(this.cursor, Math.min(Math.max(this.cursor, this.bottom - p.h), p.y));
+    // The design may hang off the print area (only the part inside prints) but always keeps at
+    // least MIN_SIZE inside it, so it can't be lost off the edge.
+    const p = this.placement, a = this.printArea;
+    const keep = (pos, size, a0, aSize) =>
+      Math.max(a0 + Math.min(MIN_SIZE, aSize) - size, Math.min(a0 + aSize - Math.min(MIN_SIZE, aSize), pos));
+    p.x = keep(p.x, p.w, a.x, a.w);
+    p.y = keep(p.y, p.h, a.y, Math.max(a.h, MIN_SIZE));
     const centred = PRINT_X0 + Math.round((WIDTH_DOTS - p.w) / 2);
     this.snapped = Math.abs(p.x - centred) <= SNAP;
     if (this.snapped) p.x = centred;
@@ -235,13 +256,30 @@ export class SheetView extends EventTarget {
         ctx.lineWidth = px;
         ctx.beginPath(); ctx.moveTo(SHEET_W / 2, 0); ctx.lineTo(SHEET_W / 2, SHEET_H); ctx.stroke();
       }
+      const vis = this.visible, accent = col("--accent") || "#0a84ff";
       if (this.bitmap) {
         ctx.imageSmoothingEnabled = true;
+        // Faint everywhere, then full strength only where it will actually print.
+        ctx.globalAlpha = this.cropped ? 0.18 : 1;
         ctx.drawImage(this.bitmap, p.x, p.y, p.w, p.h);
+        ctx.globalAlpha = 1;
+        if (this.cropped) {
+          ctx.save();
+          ctx.beginPath(); ctx.rect(vis.x, vis.y, vis.w, vis.h); ctx.clip();
+          ctx.drawImage(this.bitmap, p.x, p.y, p.w, p.h);
+          ctx.restore();
+        }
       }
-      ctx.strokeStyle = this.fits ? (col("--accent") || "#0a84ff") : "#e5352b";
       ctx.lineWidth = 2 * px;
-      ctx.strokeRect(p.x, p.y, p.w, p.h);
+      if (this.cropped) {
+        ctx.setLineDash([6 * px, 4 * px]);
+        ctx.strokeStyle = "rgba(120,120,120,.8)";
+        ctx.strokeRect(p.x, p.y, p.w, p.h);
+        ctx.setLineDash([]);
+      }
+      ctx.strokeStyle = this.fits ? accent : "#e5352b";
+      if (vis) ctx.strokeRect(vis.x, vis.y, vis.w, vis.h);
+      else ctx.strokeRect(p.x, p.y, p.w, p.h);
     }
     ctx.restore();
   }

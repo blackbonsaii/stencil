@@ -46,6 +46,28 @@ test("x offset, mirror and clipping", () => {
   assert.equal(r[0], 0x08);
 });
 
+test("design hanging off the top, bottom or side prints only the part inside", () => {
+  // 2 wide x 6 tall, one black dot per row in column 0, plus column 1 black on row 5 only
+  const g = new Uint8Array(12).fill(255);
+  for (let y = 0; y < 6; y++) g[y * 2] = 0;
+  g[11] = 0;
+  const opts = { flipSheet: false };
+  let p = packRows(g, 2, 6, { ...opts, lead: -2 });             // top 2 rows above the cursor: cut
+  assert.equal(p.height, 4);
+  p = packRows(g, 2, 6, { ...opts, lead: 3, maxRows: 5 });      // only 2 design rows before the sheet ends
+  assert.equal(p.height, 5);
+  p = packRows(g, 2, 6, { ...opts, lead: -2, maxRows: 3 });     // both at once
+  assert.equal(p.height, 3);
+  // Column 0 off the left edge: only column 1 prints, so rows 0-4 are blank and are trimmed away
+  // from the end, but not from the start (they position row 5).
+  p = packRows(g, 2, 6, { ...opts, x: -1 });
+  assert.equal(p.height, 6);
+  assert.equal(p.rows[5 * 208], 0x80);
+  // Only row 5's dot is in column 1; with row 5 below the sheet end there's nothing left to print.
+  assert.equal(packRows(g, 2, 6, { ...opts, x: -1, maxRows: 5 }).height, 0);
+  assert.equal(packRows(g, 2, 6, { ...opts, lead: -6 }).height, 0);
+});
+
 test("sheet flip puts the leftmost on-screen dot at the far end of the row", () => {
   const g = new Uint8Array(8).fill(255); g[0] = 0;
   const r = packRows(g, 8, 1, { x: 0 }).rows;

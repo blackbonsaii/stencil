@@ -1,5 +1,5 @@
 // Image → printer dots. Pure functions over plain arrays so they can be tested in Node.
-import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=1.8";
+import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=1.9";
 
 /**
  * RGBA pixels → grayscale (0 black … 255 white), transparency treated as white paper.
@@ -43,25 +43,34 @@ export function inkBounds(gray, w, h, threshold) {
  * @param {number} h
  * @param {object} o
  * @param {number} o.x        left edge of the design in dots (may be negative or overhang; clipped)
- * @param {number} o.lead     blank rows to send before the design (positions it down the sheet)
+ * @param {number} o.lead     blank rows to send before the design (positions it down the sheet);
+ *                            negative cuts that many rows off the top of the design
+ * @param {number} o.maxRows  stop after this many rows (the end of the sheet); design rows past it are cut
  * @param {number} o.threshold  gray below this prints black
  * @param {boolean} o.mirror  flip the design horizontally
  * @param {boolean} o.flipSheet  the TP88 lays dots right-to-left as seen from the printed side,
  *                               so the whole row is reversed to match the on-screen preview
  * @returns {{rows: Uint8Array, height: number}}
  */
-export function packRows(gray, w, h, { x = 0, lead = 0, threshold = 128, mirror = false, flipSheet = true }) {
-  // Drop trailing blank rows so short designs don't feed extra paper.
-  let last = h - 1;
-  outer: for (; last >= 0; last--) {
-    for (let i = last * w, e = i + w; i < e; i++) if (gray[i] < threshold) break outer;
-  }
-  const designRows = last + 1;
-  const height = designRows === 0 ? 0 : lead + designRows;
+export function packRows(gray, w, h, { x = 0, lead = 0, maxRows = Infinity, threshold = 128,
+                                       mirror = false, flipSheet = true }) {
+  const from = Math.max(0, -x), to = Math.min(w, WIDTH_DOTS - x);       // columns the head reaches
+  const first = Math.max(0, -lead);                                      // rows cut off the top
+  const end = Math.min(h, Math.max(first, maxRows - lead));             // rows cut off the bottom
+  // Drop trailing rows with nothing to print (within the columns that print) so short designs
+  // don't feed extra paper.
+  const inked = y => {
+    for (let sx = from; sx < to; sx++) if (gray[y * w + (mirror ? w - 1 - sx : sx)] < threshold) return true;
+    return false;
+  };
+  let last = end - 1;
+  while (last >= first && !inked(last)) last--;
+  if (last < first) return { rows: new Uint8Array(0), height: 0 };
+  const top = Math.max(0, lead);
+  const height = top + last + 1 - first;
   const rows = new Uint8Array(height * WIDTH_BYTES);
-  const from = Math.max(0, -x), to = Math.min(w, WIDTH_DOTS - x);
-  for (let y = 0; y < designRows; y++) {
-    const src = y * w, dst = (lead + y) * WIDTH_BYTES;
+  for (let y = first; y <= last; y++) {
+    const src = y * w, dst = (top + y - first) * WIDTH_BYTES;
     for (let sx = from; sx < to; sx++) {
       const v = gray[src + (mirror ? w - 1 - sx : sx)];
       if (v < threshold) {

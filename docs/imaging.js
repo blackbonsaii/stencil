@@ -1,5 +1,5 @@
 // Browser side of the image pipeline: decode, crop to the ink, scale to printer dots.
-import { toGray, inkBounds, packRows } from "./raster.js?v=1.8";
+import { toGray, inkBounds, packRows } from "./raster.js?v=1.9";
 
 const MAX_SOURCE_PX = 4096;     // cap huge camera-roll images to keep phones responsive
 const CROP_THRESHOLD = 245;     // anything darker than near-white counts as part of the design
@@ -76,11 +76,14 @@ export function previewBitmap(gray, w, h, threshold, mirror) {
   return c;
 }
 
-/** Small thumbnail (data URL) of the printed bitmap, kept as the ghost on the sheet. */
-export function ghostThumb(bitmap, maxPx = 300) {
-  const s = Math.min(1, maxPx / Math.max(bitmap.width, bitmap.height));
-  const c = canvas(Math.max(1, Math.round(bitmap.width * s)), Math.max(1, Math.round(bitmap.height * s)));
-  c.getContext("2d").drawImage(bitmap, 0, 0, c.width, c.height);
+/**
+ * Small thumbnail (data URL) of the printed bitmap, kept as the ghost on the sheet.
+ * `crop` (bitmap pixels) limits it to the part that printed.
+ */
+export function ghostThumb(bitmap, crop = { x: 0, y: 0, w: bitmap.width, h: bitmap.height }, maxPx = 300) {
+  const s = Math.min(1, maxPx / Math.max(crop.w, crop.h));
+  const c = canvas(Math.max(1, Math.round(crop.w * s)), Math.max(1, Math.round(crop.h * s)));
+  c.getContext("2d").drawImage(bitmap, crop.x, crop.y, crop.w, crop.h, 0, 0, c.width, c.height);
   return c.toDataURL("image/png");
 }
 

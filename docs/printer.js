@@ -1,5 +1,5 @@
 // Web Bluetooth connection to the TP88 (works in Bluefy on iOS, Chrome on Mac/Android).
-import { QUERY, parseStatus } from "./protocol.js?v=1.8";
+import { QUERY, parseStatus } from "./protocol.js?v=1.9";
 
 // Full 128-bit UUIDs: some iOS Bluetooth browsers reject the short numeric form.
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
