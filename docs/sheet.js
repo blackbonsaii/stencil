@@ -1,5 +1,5 @@
 // Interactive preview of a US Letter sheet, in printer dots. Pinch to resize, drag to move.
-import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.6";
+import { DPI, WIDTH_DOTS } from "./protocol.js?v=1.7";
 
 // Printable tissue of the user's stencil sheets: 214 × 259 mm (the rest of the 8.5 × 11 in
 // sheet is the glued strip at the top).

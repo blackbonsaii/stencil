@@ -1,5 +1,5 @@
 // Web Bluetooth connection to the TP88 (works in Bluefy on iOS, Chrome on Mac/Android).
-import { QUERY, parseStatus } from "./protocol.js?v=1.6";
+import { QUERY, parseStatus } from "./protocol.js?v=1.7";
 
 // Full 128-bit UUIDs: some iOS Bluetooth browsers reject the short numeric form.
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
@@ -120,17 +120,28 @@ export class Printer extends EventTarget {
   }
 
   /** Send bytes, chunked to the printer's payload size and paced by its credits. */
-  async send(data, onProgress) {
+  async send(data, onProgress, timing) {
     for (let i = 0; i < data.length; i += this.#maxPayload) {
       if (!this.connected) throw new Error(`Printer disconnected (${i} of ${data.length} bytes sent)`);
+      const tWait = performance.now();
       try { await this.#takeCredit(); }
       catch (e) { e.message += ` (${i} of ${data.length} bytes sent)`; throw e; }
+      const tWrite = performance.now();
       // slice() copies into a buffer of exactly this chunk. Bluefy sends a view's whole underlying
       // buffer, so passing a subarray re-sent the start of the job on every write.
       const chunk = data.slice(i, i + this.#maxPayload);
       if (this.#write.writeValueWithoutResponse) await this.#write.writeValueWithoutResponse(chunk);
       else await this.#write.writeValue(chunk);
       this.#writes++;
+      if (timing) {
+        // Waiting for credits means the printer's buffer is full (it's the bottleneck, fine).
+        // Time inside the write while credits are spare means we're slower than the head,
+        // which can make it stop and start.
+        const now = performance.now();
+        timing.wait += tWrite - tWait; timing.write += now - tWrite;
+        timing.slowest = Math.max(timing.slowest, now - tWrite);
+        if (this.#credits > 0) timing.spare++;
+      }
       onProgress?.(Math.min(1, (i + chunk.length) / data.length));
     }
   }
@@ -143,11 +154,19 @@ export class Printer extends EventTarget {
       const t0 = performance.now(), w0 = this.#writes, c0 = this.#creditsGranted;
       this.log(`print: ${job.length} bytes in ${Math.ceil(job.length / this.#maxPayload)} writes of ≤${this.#maxPayload}`);
       let next = 0.25;
+      const timing = { wait: 0, write: 0, slowest: 0, spare: 0 };
       try {
         await this.send(job, f => {
           onProgress?.(f);
-          if (f >= next) { this.log(`  ${Math.round(f * 100)}% after ${((performance.now() - t0) / 1000).toFixed(1)}s`); next += 0.25; }
-        });
+          if (f >= next) {
+            const ms = x => Math.round(x);
+            this.log(`  ${Math.round(f * 100)}% after ${((performance.now() - t0) / 1000).toFixed(1)}s ` +
+              `(waiting for printer ${ms(timing.wait)}ms, writing ${ms(timing.write)}ms, slowest write ${ms(timing.slowest)}ms, ` +
+              `writes with credit to spare ${timing.spare})`);
+            Object.assign(timing, { wait: 0, write: 0, slowest: 0, spare: 0 });
+            next += 0.25;
+          }
+        }, timing);
       } catch (e) {
         this.log(`print failed: ${e.message}; writes ${this.#writes - w0}, credits back ${this.#creditsGranted - c0}, credits now ${this.#credits}`);
         throw e;
