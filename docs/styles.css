@@ -27,6 +27,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -162,3 +163,27 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 }
 .diag .btn { width: 100%; font-size: 13px; padding: 8px; }
 .diag[open] { display: flex; flex-direction: column; gap: 8px; }
+
+.tools .btn { padding: 9px 4px; font-size: 14px; font-weight: 600; }
+.link { appearance: none; border: 0; background: none; color: var(--accent); font: inherit; font-size: 14px; padding: 2px 0; cursor: pointer; }
+.label { font-size: 14px; }
+.recent-head { display: flex; justify-content: space-between; align-items: baseline; }
+.recent { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+.recent-item {
+  position: relative; flex: 0 0 auto; width: 76px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  appearance: none; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--muted); font: inherit; font-size: 11px;
+  padding: 6px 4px; cursor: pointer; scroll-snap-align: start;
+}
+.recent-item img { width: 64px; height: 64px; object-fit: contain; background: #fff; border-radius: 6px; }
+.recent-item.editing img { opacity: .6; }
+.recent-x {
+  position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--danger); color: #fff; font-size: 15px; line-height: 22px; text-align: center;
+}
+
+dialog.full { width: min(96vw, 900px); height: min(92dvh, 1100px); max-width: none; max-height: none; padding: 14px; }
+dialog.full form { height: 100%; }
+dialog.full p { margin: 0; font-size: 14px; }
+.crop-canvas { flex: 1; min-height: 0; width: 100%; touch-action: none; background: var(--bg); border-radius: 10px; }

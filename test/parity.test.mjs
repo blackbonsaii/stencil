@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildJob, parseStatus, WIDTH_BYTES } from "../docs/protocol.js";
-import { packRows, toGray, inkBounds } from "../docs/raster.js";
+import { packRows, toGray, inkBounds, mergeRows } from "../docs/raster.js";
 
 const dir = new URL(".", import.meta.url);
 const gray = new Uint8Array(readFileSync(new URL("fixture.gray", dir)));
@@ -87,4 +87,15 @@ test("status parsing", () => {
   assert.deepEqual(parseStatus([0x1a, 0x06, 0x88]), { paper: false });
   assert.deepEqual(parseStatus([0x1a, 0x04, 0x64]), { battery: 100 });
   assert.equal(parseStatus([0x01, 0x01]), null);
+});
+
+test("several designs merge into one print; white never covers black", () => {
+  const a = new Uint8Array(4).fill(255); a[0] = 0;            // 4x1, dot at 0
+  const b = new Uint8Array(8).fill(255); b[7] = 0;            // 4x2, dot at (3,1); row 0 white
+  const pa = packRows(a, 4, 1, { x: 0, lead: 1, flipSheet: false });
+  const pb = packRows(b, 4, 2, { x: 0, lead: 0, flipSheet: false });   // overlaps a's row
+  const m = mergeRows([pa, pb]);
+  assert.equal(m.height, 2);
+  assert.equal(m.rows[208], 0x80 | 0x10);                     // both dots on row 1
+  assert.equal(mergeRows([]).height, 0);
 });

@@ -1,8 +1,8 @@
 // Offline support: always try the network first so updates show up straight away;
 // fall back to the cached copy when offline or the network is slow.
-const VERSION = "stencil-v2.0";
-const FILES = ["./", "index.html", "styles.css?v=2.0", "app.js?v=2.0", "protocol.js?v=2.0", "raster.js?v=2.0", "imaging.js?v=2.0",
-               "printer.js?v=2.0", "sheet.js?v=2.0", "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-512.png"];
+const VERSION = "stencil-v2.1";
+const FILES = ["./", "index.html", "styles.css?v=2.1", "app.js?v=2.1", "protocol.js?v=2.1", "raster.js?v=2.1", "imaging.js?v=2.1",
+               "printer.js?v=2.1", "sheet.js?v=2.1", "library.js?v=2.1", "crop.js?v=2.1", "manifest.webmanifest", "icon.svg", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

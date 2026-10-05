@@ -1,5 +1,5 @@
 // Image → printer dots. Pure functions over plain arrays so they can be tested in Node.
-import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=2.0";
+import { WIDTH_BYTES, WIDTH_DOTS } from "./protocol.js?v=2.1";
 
 /**
  * RGBA pixels → grayscale (0 black … 255 white), transparency treated as white paper.
@@ -79,5 +79,18 @@ export function packRows(gray, w, h, { x = 0, lead = 0, maxRows = Infinity, thre
       }
     }
   }
+  return { rows, height };
+}
+
+/**
+ * Combine several packed prints (each from packRows, all measured from the same first row) into
+ * one, OR-ing their dots: only black is ever added, so a design's white background can never
+ * cover another design's lines.
+ * @param {{rows: Uint8Array, height: number}[]} parts
+ */
+export function mergeRows(parts) {
+  const height = Math.max(0, ...parts.map(p => p.height));
+  const rows = new Uint8Array(height * WIDTH_BYTES);
+  for (const p of parts) for (let i = 0; i < p.rows.length; i++) rows[i] |= p.rows[i];
   return { rows, height };
 }

@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="styles.css?v=2.0">
+<link rel="stylesheet" href="styles.css?v=2.1">
 </head>
 <body>
 <header class="bar">
@@ -22,16 +22,23 @@
 <main class="layout">
   <section class="stage">
     <canvas id="sheet" aria-label="Sheet preview. Drag to move the design, pinch to resize."></canvas>
-    <p id="empty-hint" class="hint">Choose a design to place it on the sheet</p>
+    <p id="empty-hint" class="hint">Add a design to place it on the sheet</p>
   </section>
 
   <aside class="panel">
     <label class="btn primary-outline file">
       <input id="file" type="file" accept="image/*" hidden>
-      <span id="file-label">Choose design</span>
+      <span id="file-label">Add design</span>
     </label>
 
+    <div class="group" id="recent-group" hidden>
+      <div class="recent-head"><span class="label">Recent designs</span>
+        <button id="recent-edit" class="link" type="button">Edit</button></div>
+      <div id="recent" class="recent"></div>
+    </div>
+
     <div class="group" id="size-group" hidden>
+      <p id="sel-name" class="note" hidden></p>
       <div class="row">
         <label class="field">Width
           <span class="unit"><input id="w-in" type="number" inputmode="decimal" step="0.05" min="0.25"><i>in</i></span>
@@ -40,6 +47,12 @@
         <label class="field">Height
           <span class="unit"><input id="h-in" type="number" inputmode="decimal" step="0.05" min="0.25"><i>in</i></span>
         </label>
+      </div>
+      <div class="row tools">
+        <button id="smaller" class="btn" type="button" aria-label="10 percent smaller">−10%</button>
+        <button id="bigger" class="btn" type="button" aria-label="10 percent bigger">+10%</button>
+        <button id="crop" class="btn" type="button">Crop</button>
+        <button id="remove" class="btn" type="button">Remove</button>
       </div>
       <p id="size-note" class="note"></p>
     </div>
@@ -96,6 +109,18 @@
   </form>
 </dialog>
 
-<script type="module" src="app.js?v=2.0"></script>
+<dialog id="crop-dialog" class="full">
+  <form method="dialog">
+    <p>Drag a box around the part you want to print. Drag its corners to adjust it.</p>
+    <canvas class="crop-canvas"></canvas>
+    <div class="row">
+      <button value="cancel" class="btn">Cancel</button>
+      <button value="reset" class="btn" type="button">Clear box</button>
+      <button value="crop" class="btn primary">Crop</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="app.js?v=2.1"></script>
 </body>
 </html>
