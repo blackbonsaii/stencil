@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="styles.css?v=1.7">
+<link rel="stylesheet" href="styles.css?v=1.8">
 </head>
 <body>
 <header class="bar">
@@ -86,16 +86,16 @@
   </aside>
 </main>
 
-<dialog id="after-print">
+<dialog id="sheet-ask">
   <form method="dialog">
-    <h2>Printed</h2>
-    <p>Where's the sheet now?</p>
-    <button value="in" class="btn primary">Still in the printer, print more below</button>
-    <button value="top" class="btn">I put it back in at the top</button>
-    <button value="done" class="btn">Done with this sheet</button>
+    <h2 id="sheet-ask-title">Where's the sheet?</h2>
+    <p id="sheet-ask-text"></p>
+    <button value="in" id="sheet-ask-in" class="btn">Still in the printer where it stopped</button>
+    <button value="top" class="btn">Same sheet, back in at the top</button>
+    <button value="done" class="btn">New sheet</button>
   </form>
 </dialog>
 
-<script type="module" src="app.js?v=1.7"></script>
+<script type="module" src="app.js?v=1.8"></script>
 </body>
 </html>

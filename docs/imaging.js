@@ -1,5 +1,5 @@
 // Browser side of the image pipeline: decode, crop to the ink, scale to printer dots.
-import { toGray, inkBounds, packRows } from "./raster.js?v=1.7";
+import { toGray, inkBounds, packRows } from "./raster.js?v=1.8";
 
 const MAX_SOURCE_PX = 4096;     // cap huge camera-roll images to keep phones responsive
 const CROP_THRESHOLD = 245;     // anything darker than near-white counts as part of the design

@@ -67,3 +67,7 @@ Reinserting the sheet resets the position to the top. Any position tracking has 
 - **iOS write size:** keep BLE writes ≤ 180 bytes. iPhones negotiate a smaller MTU than the 244 bytes the printer advertises.
 - **Bluefy bug:** `writeValueWithoutResponse(view)` sends the view's whole underlying `ArrayBuffer`, not just the view. Always pass a copy (`data.slice()`), never a `subarray()`.
 - **Pairing:** iOS asks to pair on first access and may drop the link once. The app reconnects automatically.
+
+## Sheet tracking in the app
+
+While idle, the app polls the paper sensor (`1f 11 11`) every 1.5 s, only when a send credit is spare, so polls never interleave with a print job. A sheet going in resets the print position to the top; if the sheet already had prints, the app asks whether it's the same sheet (keep the outlines) or a new one. If the app was disconnected for more than 10 s while partway down a sheet, it asks where the sheet is on reconnect. Not yet verified: that the sensor reads "loaded" while a sheet sits partway through after a short print.

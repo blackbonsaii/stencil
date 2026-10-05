@@ -1,11 +1,13 @@
 // Web Bluetooth connection to the TP88 (works in Bluefy on iOS, Chrome on Mac/Android).
-import { QUERY, parseStatus } from "./protocol.js?v=1.7";
+import { QUERY, parseStatus } from "./protocol.js?v=1.8";
 
 // Full 128-bit UUIDs: some iOS Bluetooth browsers reject the short numeric form.
 const SERVICE = "0000ff00-0000-1000-8000-00805f9b34fb";
 const WRITE   = "0000ff02-0000-1000-8000-00805f9b34fb";
 const NOTIFY  = "0000ff03-0000-1000-8000-00805f9b34fb";
 const CREDIT_TIMEOUT_MS = 10000;
+// How often to read the paper sensor while idle, so the app notices a sheet coming out or going in.
+const PAPER_POLL_MS = 1500;
 // iPhones typically negotiate a ~185-byte MTU, so a write-without-response over ~182 bytes is
 // silently dropped or cut short, whatever the printer advertises. Stay under it.
 const MAX_SAFE_PAYLOAD = 180;
@@ -52,6 +54,8 @@ export class Printer extends EventTarget {
   #writes = 0;
   #creditWaiters = [];
   #busy = false;
+  #paperTimer = null;
+  #paper;                      // last sensor reading this connection (undefined until the first)
   status = {};
 
   get connected() { return !!this.device?.gatt?.connected && !!this.#write; }
@@ -101,6 +105,7 @@ export class Printer extends EventTarget {
       at("Reading status…");
       await this.refreshStatus();
       this.log(`connected; max payload ${this.#maxPayload}, credits ${this.#credits}`);
+      this.#watchPaper();
       at("");
     } catch (err) {
       if (err?.name === "NotFoundError" && step === "Choosing printer…") throw err;   // user cancelled the picker
@@ -114,6 +119,17 @@ export class Printer extends EventTarget {
   }
 
   disconnect() { this.#manualDisconnect = true; this.device?.gatt?.disconnect(); }
+
+  /** Poll the paper sensor while idle; a change fires a "paper" event (detail: { loaded }). */
+  #watchPaper() {
+    clearInterval(this.#paperTimer);
+    this.#paperTimer = setInterval(() => {
+      // Only with a spare credit, so a poll never queues behind (or delays) a print.
+      if (this.connected && !this.#busy && !this.#connecting && this.#credits > 0) {
+        this.send(new Uint8Array(QUERY.paper)).catch(() => {});
+      }
+    }, PAPER_POLL_MS);
+  }
 
   async refreshStatus() {
     for (const q of [QUERY.battery, QUERY.paper, QUERY.cover]) await this.send(new Uint8Array(q));
@@ -210,6 +226,14 @@ export class Printer extends EventTarget {
         else if (s && !s.unknown) {
           if (s.coverRaw != null && s.coverRaw !== 0x98) this.log(`cover status byte ${hex([s.coverRaw])} (not the usual closed value 98)`);
           Object.assign(this.status, s); this.#emit("status");
+          if (s.paper != null && s.paper !== this.#paper) {
+            const first = this.#paper === undefined;
+            this.#paper = s.paper;
+            if (!first) {
+              this.log(`paper sensor: sheet ${s.paper ? "loaded" : "removed"}`);
+              this.dispatchEvent(new CustomEvent("paper", { detail: { loaded: s.paper } }));
+            }
+          }
         }
         else this.log(`printer said: ${hex(b.subarray(i, i + len))}`);
         i += len;
@@ -230,6 +254,8 @@ export class Printer extends EventTarget {
   #onDisconnect() {
     this.log("disconnected");
     this.#write = null;
+    clearInterval(this.#paperTimer);
+    this.#paper = undefined;     // a sheet may be swapped while we can't see it
     for (const w of this.#creditWaiters) { clearTimeout(w.timer); w.reject(new Error("Printer disconnected")); }
     this.#creditWaiters = [];
     this.#emit("connection");

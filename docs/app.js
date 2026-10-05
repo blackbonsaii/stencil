@@ -1,8 +1,8 @@
-import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.7";
-import { Printer } from "./printer.js?v=1.7";
-import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray, sizeCheckDesign } from "./imaging.js?v=1.7";
-const VERSION = "1.7";
-import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.7";
+import { buildJob, DPI, FEED_LINES, INTER_JOB_GAP_DOTS, WIDTH_DOTS } from "./protocol.js?v=1.8";
+import { Printer } from "./printer.js?v=1.8";
+import { loadDesign, grayAtSize, previewBitmap, ghostThumb, packRows, calibrationGray, sizeCheckDesign } from "./imaging.js?v=1.8";
+const VERSION = "1.8";
+import { SheetView, PRINT_X0, SHEET_H, fmtIn } from "./sheet.js?v=1.8";
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -210,8 +210,11 @@ $("print").addEventListener("click", async () => {
     updatePrintButton();
     say("Printing…");
     await printer.print(job, f => { $("progress").value = f; });
-    say("");
-    afterPrint(ghost, endCursor);
+    // The sheet stays where the print stopped; the paper sensor resets this when it's taken out.
+    sheet.ghosts.push(ghost);
+    sheet.cursor = Math.min(sheet.bottom, endCursor);
+    saveSheet();
+    say("Printed. The next print goes below this one, or take the sheet out and back in to start at the top.");
   } catch (err) {
     if (err.name !== "NotFoundError") say(err.message || String(err), true);
   } finally {
@@ -220,20 +223,52 @@ $("print").addEventListener("click", async () => {
   }
 });
 
-function afterPrint(ghost, endCursor) {
-  const dlg = $("after-print");
+/**
+ * Ask what happened to the sheet. With `canBeIn` false (the sensor just saw a sheet go in) the
+ * only question is whether it's the same sheet, so its earlier outlines should stay.
+ */
+function askSheet({ title, text, canBeIn }) {
+  const dlg = $("sheet-ask");
+  if (dlg.open) dlg.close("cancel");
+  $("sheet-ask-title").textContent = title;
+  $("sheet-ask-text").textContent = text;
+  $("sheet-ask-in").hidden = !canBeIn;
   dlg.addEventListener("close", () => {
     const where = dlg.returnValue;
     if (where === "done") { sheet.ghosts = []; sheet.cursor = freshCursor(); }
-    else {
-      sheet.ghosts.push(ghost);
-      sheet.cursor = where === "top" ? freshCursor() : Math.min(sheet.bottom, endCursor);
-    }
+    else if (where === "top") sheet.cursor = freshCursor();
+    else if (where === "in" || where === "cancel") return;
     saveSheet();
   }, { once: true });
-  dlg.returnValue = "in";
+  dlg.returnValue = canBeIn ? "in" : "top";
   dlg.showModal();
 }
+
+// The paper sensor tells us when a sheet comes out or goes in, so the app always knows where
+// the next print starts instead of relying on someone remembering to tap "New sheet".
+printer.addEventListener("paper", e => {
+  if (!e.detail.loaded) return say("Sheet out. The next one you put in starts at the top.");
+  sheet.cursor = freshCursor();
+  saveSheet();
+  say("");
+  if (sheet.ghosts.length) {
+    askSheet({ title: "Sheet loaded", text: "Is it the same sheet again? Its earlier prints will show as outlines.", canBeIn: false });
+  }
+});
+
+// While disconnected the sheet may have been swapped unseen. If the app thinks it's partway down
+// a sheet, ask on reconnect (but not after the brief drop iOS does right after pairing).
+let linked = false, disconnectedAt = 0;
+printer.addEventListener("connection", () => {
+  if (printer.connected === linked) return;      // fires more than once per connect
+  linked = printer.connected;
+  if (!linked) { disconnectedAt = Date.now(); return; }
+  const unseen = !disconnectedAt || Date.now() - disconnectedAt > 10000;
+  if (unseen && sheet.cursor > freshCursor()) {
+    askSheet({ title: "Where's the sheet?", canBeIn: true,
+      text: `The last print stopped ${fmtIn(sheet.cursor - freshCursor())} down the sheet. If the sheet hasn't moved, the next print goes below it.` });
+  }
+});
 
 // ---- calibration ------------------------------------------------------------------
 
@@ -276,5 +311,5 @@ function say(text, bad = false) {
 $("version").textContent = `Stencil v${VERSION}`;
 
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("sw.js?v=1.7").catch(() => {});
+  navigator.serviceWorker.register("sw.js?v=1.8").catch(() => {});
 }
